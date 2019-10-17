@@ -2,7 +2,7 @@
  '
  ' @file  algorithm.py
  '
- ' @brief  A few algorithmic implementations
+ ' @brief  Any algorithmic implementations
  '
  ' @version  1.0
  '
@@ -11,6 +11,8 @@
  ' @author  Red, 735467224@qq.com
  '
 '''
+
+from Hungary import Hungary
 
 class algorithm:
     def __init__(self):
@@ -23,7 +25,8 @@ class algorithm:
         :return: none
         '''
 
-        ### getPolygonArea ###
+        ####################################################################
+        ########################## getPolygonArea ##########################
         points = []
         points.append((0, 0))
         points.append((0, 3))
@@ -31,12 +34,28 @@ class algorithm:
 
         area = algorithm.getPolygonArea(points)
         print("Exp.1 Polygon Area = " + str(area) + ", expect(6).")
+        ####################################################################
 
-        ### (next Exp.) ###
 
-        ### Cancel ###
+        ####################################################################
+        ############################# Hungary ##############################
+        exp_cost = Hungary.getExpInput()
+
+        indices = algorithm.getCostMatchings(exp_cost)
+        print("Exp.2 Hungary Result is", indices, ", expect(1,2,4,3,0).")
+        ####################################################################
+
+
+        ####################################################################
+        ###                         (next Exp.)                          ###
+        ####################################################################
+
+
+        ####################################################################
+        ############################## Cacel ###############################
         print()
         print("All examples for algorithm were completed.")
+        ####################################################################
 
     @staticmethod
     def getPolygonArea(points):
@@ -47,7 +66,6 @@ class algorithm:
         :param points: list, input vertex coordinates
         :return: float, polygon area
         '''
-
         sizep = len(points)
         if sizep<3:
             return 0.0
@@ -59,3 +77,18 @@ class algorithm:
             area -= (points[i][0] * points[v][1])
 
         return abs(0.5 * area)
+
+    @staticmethod
+    def getCostMatchings(cost):
+        '''
+        brief: solve the minimum weighted bipartite matching problem by using Hungary Algorithm
+        refer: https://wenku.baidu.com/view/20428d2cba0d4a7303763a8c.html
+
+        :param cost: matching cost matrix
+        :return: array, matching indices
+        '''
+        hgy = Hungary(cost)
+        hgy.Invoke()
+
+        indices = hgy.getIndices()
+        return indices
