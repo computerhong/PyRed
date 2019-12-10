@@ -6,13 +6,14 @@
  '
  ' @version  1.0
  '
- ' @date  2019/9/25 20:53:59
+ ' @date  2019/12/10 20:53:59
  '
  ' @author  Red, 735467224@qq.com
  '
 '''
 
 from Hungary import Hungary
+from EdgeCluster import EdgeCluster
 
 class algorithm:
     def __init__(self):
@@ -43,6 +44,16 @@ class algorithm:
 
         indices = algorithm.getCostMatchings(exp_cost)
         print("Exp.2 Hungary Result is", indices, ", expect(1,2,4,3,0).")
+        ####################################################################
+
+
+        ####################################################################
+        ########################### EdgeCluster ############################
+        ecluster = EdgeCluster(source = 0)
+        print("Exp.3 EdgeCluster is running...")
+
+        ecluster.run()
+        print("Exp.3 EdgeCluster is closed.")
         ####################################################################
 
 
