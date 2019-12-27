@@ -14,60 +14,65 @@
 
 import cv2
 import time
-import math
 import random
 import numpy as np
+
+from util import util
+from util import VideoSave
 
 '''
  ' @brief Edge clustering algorithm
  ' there were any indoor scenes that contained irregular objects different from others such as lines and color-rectangles in the floor.
  ' it will find these objects and clustering them.
 '''
-class EdgeCluster:
-    def __init__(self, source):
+class EdgeCluster(VideoSave):
+    def __init__(self, savepath=None):
         '''
         brief: __init__
-        :param source: input source, video(source=0) or avi(source='../source.avi')
+        :param savepath: savepath='../...avi'   It will save the result video while run(source).
         '''
-        self.source = source
-        self.w = 0                  # width of source video/avi
-        self.h = 0                  # height of source video/avi
-        self.thresElapsed = 0.08    # running elapsed of per frame, if exceed then truncature
+        VideoSave.__init__(self, savepath)
 
         self.idx_block = 0          # current index of block, if truncature it will running from the current index block at the next frame
         self.hisrects = []          # detected rects on the pass
         self.hiscount = []          # times of lose focus for the detected rects on the pass
+        self.ovlcount = []          # times of touch by the detected rects on the pass
+        self.retainov = 3           # threshold times of touch on a hisrect
         self.retainfm = 10          # threshold times of lose focus for a rect, if exceed then destroy
+        self.thresElapsed = 0.05    # running elapsed of per frame, if exceed then truncature
 
         self.thresc = 150           # lower threshold of Canny at the current frame
         self.secth = 30             # interval of Canny thresholds
-        self.threscmin = 30         # lower threshold of Canny at the automation loop
+        self.threscmin = 100        # lower threshold of Canny at the automation loop
 
-        self.bs = 60                # block size
-        self.rs = 20                # resize block size
+        self.rw = 160               # resize width of source image
+        self.rh = 120               # resize height of source image
+        self.bs = 20                # block size
 
-        self.threslp = 15           # threshold of points' number (in the resize block size)
+        self.threslp = 30           # threshold of points' number (in the resize block size)
         self.thresacc = 12          # threshold of accuracy for hough lines
         self.thresln = 0.2          # threshold of percentages for hough lines to points
         self.thresov = 0.2          # threshold of overlap between rects
         self.thresdt = 0.1          # threshold of percentage for cluster area to image size
 
-    def run(self):
+    def run(self, source):
         '''
         brief: run the clusterings for source video/avi
+        :param source: input source, video(source=0) or avi(source='../source.avi')
         :return: none
         '''
-        cap = cv2.VideoCapture(self.source)
-        ret, frame = cap.read()
-        (self.h, self.w, _) = frame.shape
+        cap = cv2.VideoCapture(source)
 
         while (True):
             ret, frame = cap.read()
 
             if frame is None:
+                print('The source=' + str(source) + ' is lost or ending.')
                 break
 
             start = time.clock()
+
+            self.srcimg, (self.h, self.w, _), self.count = frame.copy(), frame.shape, (self.count + 1) % 999
 
             isInterrupt, rects = self.makePreRects(frame)
 
@@ -80,6 +85,9 @@ class EdgeCluster:
 
             frame = frame + back * 192
 
+            frame[frame > 255] = 255
+
+
             self.thresc = max((self.thresc+1) if area > self.thresdt else (self.thresc-1), self.threscmin)
 
             stop = time.clock()
@@ -89,10 +97,14 @@ class EdgeCluster:
 
             cv2.putText(frame, str(fps) + ' fps', (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-            cv2.imshow('EdgeCluster', frame)
+            cv2.imshow('EdgeCluster', frame), self.save(frame)
 
             if (cv2.waitKey(1) >= 0):
                 break
+
+        cv2.destroyAllWindows()
+        cap.release()
+        return
 
     def makePreRects(self, frame):
         '''
@@ -101,31 +113,27 @@ class EdgeCluster:
         :return: isInterrupt, the running elapsed of per frame is exceed or not
                 rects, the preselection rects
         '''
-        ratio = self.bs / self.rs
-        blockx, blocky = int(self.w/self.bs), int(self.h/self.bs)
-        totalnum = blockx * blocky
+        start, isInterrupt, rects, blockx, blocky, ratiox, ratioy = \
+            time.clock(), False, [], int(self.rw/self.bs), int(self.rh/self.bs), self.w/self.rw, self.h/self.rh
 
-        dst = cv2.Canny(frame, self.thresc, self.thresc + self.secth)
+        dst, totalnum = cv2.Canny(cv2.resize(frame, (self.rw, self.rh)),
+                                  self.thresc, self.thresc + self.secth), blockx * blocky
 
-        isInterrupt, rects, start  = False, [], time.clock()
         for idxb in range(self.idx_block, self.idx_block + totalnum):
             idxb = idxb % totalnum
 
-            x = idxb % blockx * self.bs + int(random.randint(0,1) * self.bs / 2)
-            y = int(idxb / blockx) * self.bs + int(random.randint(0,1) * self.bs / 2)
+            x = idxb % blockx * self.bs + int(0.5 * random.randint(0,1) * self.bs)
+            y = int(idxb / blockx) * self.bs + int(0.5 * random.randint(0,1) * self.bs)
             xs, ys = x + self.bs, y + self.bs
 
-            if xs >= self.w or ys >= self.h:
+            if xs >= self.rw or ys >= self.rh:
                 continue
 
-            block = cv2.resize(dst[y:ys, x:xs], (self.rs, self.rs))
-            points = np.argwhere(block > 8)
-
-            lenp = len(points)
-            if lenp < self.threslp:
+            points = np.argwhere(dst[y:ys, x:xs] > 8)
+            if len(points) < self.threslp:
                 continue
 
-            hough = np.zeros(self.thresacc, dtype=np.int)
+            hough, lenp = np.zeros(self.thresacc, dtype=np.int), len(points)
             for i in range(lenp - 1):
                 for j in range(i, lenp):
                     p1, p2 = points[i], points[j]
@@ -137,14 +145,12 @@ class EdgeCluster:
             if line_percent > self.thresln:
                 continue
 
-            maxidx = np.mean(points, axis=0)
-            center = (int(maxidx[0] * ratio + x), int(maxidx[1] * ratio + y))
-            rect = (center[0] - self.bs / 2, center[1] - self.bs / 2, self.bs, self.bs)
+            lt = np.mean(points, axis=0) - 0.5 * self.bs + [x, y]
+            rect = (lt[0] * ratiox, lt[1] * ratioy, self.bs * ratiox, self.bs * ratioy)
             rects.append(rect)
 
             if (time.clock() - start) > self.thresElapsed:
-                isInterrupt = True
-                self.idx_block = idxb
+                isInterrupt, self.idx_block = True, idxb
                 break
 
         return (isInterrupt, rects)
@@ -156,15 +162,12 @@ class EdgeCluster:
         :return: mergerects, merged rects
         '''
         mergerects = []
-        for i in range(len(rects)):
+        for i, rect in enumerate(rects):
             ismerge = False
-            for j in range(len(mergerects)):
-                ov = EdgeCluster.overlap(rects[i], mergerects[j])
-                if ov > self.thresov:
-                    ismerge = True
-                    (xj, yj, wj, hj) = mergerects[j]
-                    (xi, yi, wi, hi) = rects[i]
-                    mergerects[j] = (0.5*(xj+xi), 0.5*(yj+yi), 0.5*(wj+wi), 0.5*(hj+hi))
+            for j, mrect in enumerate(mergerects):
+                if util.overlap(rect, mrect) > self.thresov:
+                    ismerge, (xj, yj, wj, hj), (xi, yi, wi, hi) = True, mrect, rect
+                    mergerects[j] = tuple(np.array([xj+xi, yj+yi, wj+wi, hj+hi])*0.5)
                     break
             if not ismerge:
                 mergerects.append(rects[i])
@@ -176,26 +179,22 @@ class EdgeCluster:
         :param mergerects: merged rects in the current frame
         :return: 0
         '''
-        for rect in mergerects:
+        for mrect in mergerects:
             ismerge = False
-            for i in range(len(self.hisrects)):
-                ov = EdgeCluster.overlap(rect, self.hisrects[i])
-                if ov>self.thresov:
-                    ismerge = True
-                    (xj, yj, wj, hj) = self.hisrects[i]
-                    (xi, yi, wi, hi) = rect
-                    self.hisrects[i] = (0.5*(xj+xi), 0.5*(yj+yi), 0.5*(wj+wi), 0.5*(hj+hi))
-                    self.hiscount[i] = 0
+            for i, hrect in enumerate(self.hisrects):
+                if util.overlap(mrect, hrect) > self.thresov:
+                    ismerge, (xj, yj, wj, hj), (xi, yi, wi, hi) = True, hrect, mrect
+                    self.hisrects[i] = tuple(np.array([xj+xi, yj+yi, wj+wi, hj+hi])*0.5)
+                    self.hiscount[i], self.ovlcount[i] = 0, self.ovlcount[i] + 1
                     break
             if not ismerge:
-                self.hisrects.append(rect)
-                self.hiscount.append(0)
+                self.hisrects.append(mrect), self.hiscount.append(0), self.ovlcount.append(0)
 
         for i in range(len(self.hisrects)-1,0,-1):
             self.hiscount[i] += 1
-            if(self.hiscount[i] > self.retainfm):
-                del self.hiscount[i]
-                del self.hisrects[i]
+            if self.hiscount[i] > self.retainfm:
+                del self.hisrects[i], self.hiscount[i], self.ovlcount[i]
+
         return 0
 
     def makeClusterBack(self, isInterrupt):
@@ -206,65 +205,22 @@ class EdgeCluster:
                 area, the clustering area percentage
         '''
         back, circles = np.zeros((self.h, self.w), dtype=np.uint8), []
-        for rect in self.hisrects:
-            ismerge = False
-            (xi, yi, wi, hi) = rect
+        for i, rect in enumerate(self.hisrects):
+            if self.ovlcount[i] < self.retainov:
+                continue
+
+            ismerge, (xi, yi, wi, hi) = False, rect
             centeri, radiusi = (int(xi+wi/2), int(yi+hi/2)), int((wi+hi)/4)
-            for j in range(len(circles)):
-                centerj, radiusj = circles[j]
-                disij = math.sqrt((centeri[0]-centerj[0])**2 + (centeri[1]-centerj[1])**2)
-                thresr = int((radiusi + radiusj) * 1.25)
-                if disij < thresr:
+
+            for j, (centerj, radiusj) in enumerate(circles):
+                thresr = 1.25 * (radiusi + radiusj)
+                if util.distance(centeri, centerj) < thresr:
                     ismerge = True
-                    cv2.line(back, centeri, centerj, 255, thresr)
+                    cv2.line(back, centeri, centerj, 255, int(thresr))
+
             if not ismerge:
                 circles.append([centeri, radiusi])
 
-        back, backsize = cv2.resize(back, (int(self.w/2), int(self.h/2))), self.w * self.h / 4
-        area = 1.0 if isInterrupt else (len(np.argwhere(back > 8)) / backsize)
-        back = cv2.resize(cv2.Sobel(back, cv2.CV_8UC1, 1, 1), (self.w, self.h))
-        return (cv2.merge([back,back,back]), area)
-
-    @staticmethod
-    def merge(rect1, rect2):
-        '''
-        brief: merge two rects
-        :param rect1, rect2
-        :return: merged rect
-        '''
-        (x1, y1, w1, h1) = rect1
-        (x2, y2, w2, h2) = rect2
-        x3, y3 = min(x1, x2), min(y1, y2)
-        r, b = max(x1 + w1, x2 + w2), max(y1 + h1, y2 + h2)
-        return (x3, y3, r - x3, b - y3)
-
-    @staticmethod
-    def intersec(rect1, rect2):
-        '''
-        brief: intersection of two rects
-        :param rect1, rect2
-        :return: intersec rect
-        '''
-        (x1, y1, w1, h1) = rect1
-        (x2, y2, w2, h2) = rect2
-        x3, y3 = max(x1, x2), max(y1, y2)
-        r, b = min(x1 + w1, x2 + w2), min(y1 + h1, y2 + h2)
-        if r <= x3 or b <= y3:
-            return (0, 0, 0, 0)
-        else:
-            return (x3, y3, r - x3, b - y3)
-
-    @staticmethod
-    def overlap(rect1, rect2):
-        '''
-        brief: overlap of two rects
-        :param rect1, rect2
-        :return: overlap
-        '''
-        (xi, yi, wi, hi) = EdgeCluster.intersec(rect1, rect2)
-        areai = wi * hi
-        if areai < 1e-5:
-            return 0.
-        (xm, ym, wm, hm) = EdgeCluster.merge(rect1, rect2)
-        aream = wm * hm
-        return 1.0 * areai / aream
+        backrs, backsize = cv2.resize(back, (int(self.w/8), int(self.h/8))), self.w * self.h / 64
+        area = 1.0 if isInterrupt else (len(np.argwhere(backrs > 8)) / backsize)
+        return (cv2.merge([cv2.Sobel(back, cv2.CV_8UC1, 1, 1)] * 3), area)

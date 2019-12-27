@@ -11,16 +11,17 @@
  ' @author  Red, 735467224@qq.com
  '
 '''
-
 from Hungary import Hungary
 from EdgeCluster import EdgeCluster
+from OcclusionDetect import OcclusionDetect
+from ImageClarity import ImageClarity
 
 class algorithm:
     def __init__(self):
         pass
 
     @staticmethod
-    def Examples():
+    def Examples(exp = []):
         '''
         brief: run any examples for this algorithm
         :return: none
@@ -28,34 +29,59 @@ class algorithm:
 
         ####################################################################
         ########################## getPolygonArea ##########################
-        points = []
-        points.append((0, 0))
-        points.append((0, 3))
-        points.append((4, 0))
+        if 1 in exp:
+            points = []
+            points.append((0, 0))
+            points.append((0, 3))
+            points.append((4, 0))
 
-        area = algorithm.getPolygonArea(points)
-        print("Exp.1 Polygon Area = " + str(area) + ", expect(6).")
+            area = algorithm.getPolygonArea(points)
+            print("Exp.1 Polygon Area = " + str(area) + ", expect(6).")
         ####################################################################
 
 
         ####################################################################
         ############################# Hungary ##############################
-        exp_cost = Hungary.getExpInput()
+        elif 2 in exp:
+            exp_cost = Hungary.getExpInput()
 
-        indices = algorithm.getCostMatchings(exp_cost)
-        print("Exp.2 Hungary Result is", indices, ", expect(1,2,4,3,0).")
+            indices = algorithm.getCostMatchings(exp_cost)
+            print("Exp.2 Hungary Result is", indices, ", expect(1,2,4,3,0).")
         ####################################################################
 
 
         ####################################################################
         ########################### EdgeCluster ############################
-        ecluster = EdgeCluster(source = 0)
-        print("Exp.3 EdgeCluster is running...")
+        elif 3 in exp:
+            ecluster = EdgeCluster()
+            print("Exp.3 EdgeCluster is running...")
 
-        ecluster.run()
-        print("Exp.3 EdgeCluster is closed.")
+            ecluster.run(source = '/home/hgh/PycharmProjects/others/source_3.avi')
+            print("Exp.3 EdgeCluster is closed.")
         ####################################################################
 
+        ####################################################################
+        ######################### OcclusionDetect ##########################
+        elif 4 in exp:
+            occdet = OcclusionDetect()
+            print("Exp.4 OcclusionDetect is running...")
+
+            occdet.run(source = '/home/hgh/Videos/摄像头遮挡检测/源视频/people_car.mp4')
+            print("Exp.4 OcclusionDetect is closed.")
+        ####################################################################
+
+        ####################################################################
+        ########################## ImageClarity ############################
+        elif 5 in exp:
+            iclarity = ImageClarity('/home/hgh/output-vlc-record-2019-12-06-18square.avi')
+            #iclarity.make_data_train('/home/hgh/Red/PyRed/clarity_train', '/home/hgh/Red/PyRed/clarity_train.txt')
+            #iclarity.train(labeltxt='/home/hgh/Red/PyRed/clarity_train.txt', pbsavename='./clarity.pb')
+            iclarity.load('./clarity.pb')
+
+
+            iclarity.run(source = '/home/hgh/vlc-record-2019-12-06-18square.avi')
+            print("Exp.5 ImageClarity is closed.")
+        ####################################################################
 
         ####################################################################
         ###                         (next Exp.)                          ###
